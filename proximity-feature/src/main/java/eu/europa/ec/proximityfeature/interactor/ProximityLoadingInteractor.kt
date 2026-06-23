@@ -48,6 +48,7 @@ sealed class ProximityLoadingSendRequestedDocumentPartialState {
 interface ProximityLoadingInteractor : ScopedPresentationInteractor {
     fun observeResponse(): Flow<ProximityLoadingObserveResponsePartialState>
     fun sendRequestedDocuments(): ProximityLoadingSendRequestedDocumentPartialState
+    fun isZeroKnowledgeRequest(): Boolean
     fun handleUserAuthentication(
         context: Context,
         crypto: BiometricCrypto,
@@ -117,4 +118,7 @@ class ProximityLoadingInteractorImpl(
             )
         }
     }
+
+    override fun isZeroKnowledgeRequest(): Boolean =
+        walletCorePresentationController.isZeroKnowledgeRequest()
 }

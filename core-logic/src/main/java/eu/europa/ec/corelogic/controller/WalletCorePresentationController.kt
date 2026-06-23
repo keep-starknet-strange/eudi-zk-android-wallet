@@ -25,6 +25,7 @@ import eu.europa.ec.businesslogic.extension.safeAsync
 import eu.europa.ec.businesslogic.extension.toUri
 import eu.europa.ec.corelogic.di.WalletCoreScope
 import eu.europa.ec.corelogic.di.getOrCreateKoinScope
+import eu.europa.ec.corelogic.extension.isZeroKnowledgeRequest
 import eu.europa.ec.corelogic.model.AuthenticationData
 import eu.europa.ec.corelogic.util.EudiWalletListenerWrapper
 import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
@@ -183,6 +184,12 @@ interface WalletCorePresentationController {
     fun checkForKeyUnlock(): Flow<CheckKeyUnlockPartialState>
 
     fun sendRequestedDocuments(): SendRequestedDocumentsPartialState
+
+    /**
+     * Whether the current (already received) request asks for any document via a zero-knowledge
+     * predicate, so the UI can reflect that a ZK proof is being generated while the response is built.
+     */
+    fun isZeroKnowledgeRequest(): Boolean
 
     /**
      * Updates the UI model
@@ -424,6 +431,9 @@ class WalletCorePresentationControllerImpl(
             error = genericErrorMessage
         )
     }
+
+    override fun isZeroKnowledgeRequest(): Boolean =
+        processedRequest?.requestedDocuments?.any { it.isZeroKnowledgeRequest() } == true
 
     override fun mappedCallbackStateFlow(): Flow<ResponseReceivedPartialState> {
         return events.mapNotNull { response ->

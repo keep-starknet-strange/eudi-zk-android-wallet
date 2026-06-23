@@ -28,7 +28,7 @@ import eu.europa.ec.eudi.iso18013.transfer.response.RequestedDocument
  *
  * NOTE: This is a proof-of-concept addition. The real solution needs forking of
  * `eu.europa.ec.eudi:eudi-lib-android-iso18013-data-transfer` which was considered too much for
- * this iteration.
+ * this iteration. Also check proguard-rules.pro regarding `RequestedDocument`
  */
 fun RequestedDocument.isZeroKnowledgeRequest(): Boolean = runCatching {
     val field = this::class.java.getDeclaredField("zkRequestSystemSpecs").apply {
