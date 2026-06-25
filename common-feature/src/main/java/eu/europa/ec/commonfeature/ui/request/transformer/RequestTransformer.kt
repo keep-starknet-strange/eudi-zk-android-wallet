@@ -22,7 +22,6 @@ import eu.europa.ec.commonfeature.ui.request.model.DocumentPayloadDomain
 import eu.europa.ec.commonfeature.ui.request.model.DomainDocumentFormat
 import eu.europa.ec.commonfeature.ui.request.model.RequestDocumentItemUi
 import eu.europa.ec.commonfeature.util.transformPathsToDomainClaims
-import eu.europa.ec.corelogic.extension.isZeroKnowledgeRequest
 import eu.europa.ec.corelogic.extension.toClaimPath
 import eu.europa.ec.corelogic.extension.toClaimPaths
 import eu.europa.ec.corelogic.model.ClaimPathDomain
@@ -87,7 +86,7 @@ object RequestTransformer {
                             format = storageDocument.format,
                         ),
                         docClaimsDomain = domainClaims,
-                        isZeroKnowledge = requestDocument.isZeroKnowledgeRequest(),
+                        isZeroKnowledge = requestDocument.isZeroKnowledgeRequest,
                     )
                 )
             }

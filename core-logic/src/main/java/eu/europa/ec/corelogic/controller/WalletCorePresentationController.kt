@@ -25,7 +25,6 @@ import eu.europa.ec.businesslogic.extension.safeAsync
 import eu.europa.ec.businesslogic.extension.toUri
 import eu.europa.ec.corelogic.di.WalletCoreScope
 import eu.europa.ec.corelogic.di.getOrCreateKoinScope
-import eu.europa.ec.corelogic.extension.isZeroKnowledgeRequest
 import eu.europa.ec.corelogic.model.AuthenticationData
 import eu.europa.ec.corelogic.util.EudiWalletListenerWrapper
 import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
@@ -433,7 +432,7 @@ class WalletCorePresentationControllerImpl(
     }
 
     override fun isZeroKnowledgeRequest(): Boolean =
-        processedRequest?.requestedDocuments?.any { it.isZeroKnowledgeRequest() } == true
+        processedRequest?.requestedDocuments?.any { it.isZeroKnowledgeRequest } == true
 
     override fun mappedCallbackStateFlow(): Flow<ResponseReceivedPartialState> {
         return events.mapNotNull { response ->

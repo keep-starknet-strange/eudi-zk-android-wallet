@@ -457,6 +457,12 @@ private fun RequiredPermissionsAsk(
         permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
 
+    // Wi-Fi Aware proximity (NAN) needs NEARBY_WIFI_DEVICES on API 33+. On earlier API it is
+    // covered by ACCESS_FINE_LOCATION above.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+    }
+
     val permissionsState = rememberMultiplePermissionsState(permissions = permissions)
 
     when {

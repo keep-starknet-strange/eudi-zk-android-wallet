@@ -70,6 +70,13 @@ internal class WalletCoreConfigImpl(
                         withEnabled(true)
                     }
 
+                    // Advertise Wi-Fi Aware alongside BLE for proximity presentation. It gives
+                    // higher throughput for large (ZK proof) responses. Readers without Wi-Fi
+                    // Aware hardware fall back to BLE automatically.
+                    configureProximityPresentation(
+                        enableWifiAware = true,
+                    )
+
                     configureReaderTrustStore(
                         context,
                         R.raw.pidissuerca02_cz,
