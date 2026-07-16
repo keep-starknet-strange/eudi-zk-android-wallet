@@ -18,25 +18,18 @@ package eu.europa.ec.zkplogic
 
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
+import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
-import com.kss.euid.zk.sdk.ZkWitness
-import com.kss.euid.zk.sdk.isoAlpha2ToNumeric
 import com.kss.euid.zk.sdk.predicateModeFromToken
 import com.kss.euid.zk.sdk.predicateModeUsesAge
 import com.kss.euid.zk.sdk.predicateModeUsesNat
 import com.kss.euid.zk.sdk.resultAgeOver
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tagged
-import org.multipaz.cbor.buildCborArray
-import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
-import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
@@ -105,31 +98,24 @@ fun ZkPublicStatement.Companion.forVerifier(
     )
 }
 
-/** Witness (prove side only) — real values extracted from the credential. */
-fun ZkWitness.Companion.from(
+/**
+ * Witness (prove side only). The new SDK parses the whole mdoc itself — issuer signature, MSO,
+ * disclosed items, AND the device signature (holder binding is now proven in-circuit) — so we hand
+ * it the full ISO 18013-5 `Document` CBOR instead of pre-extracting fields.
+ *
+ * The device signature inside [document] is real: Multipaz signs `DeviceAuthentication` via the
+ * credential's SecureArea in `MdocDocument.fromPresentment`, before `generateProof` is ever called.
+ */
+fun ZkMdocWitness.Companion.from(
     document: MdocDocument,
-): ZkWitness {
-    val sig = document.issuerAuth.signature // ES256 raw r||s
-    val half = sig.size / 2
-    val items = document.issuerNamespaces.data[ZK_CONTRACT.pidNamespace].orEmpty()
-    val birthItem = items[ZK_CONTRACT.elementBirthDate]
-    val natItem = items[ZK_CONTRACT.elementNationality]
-
-    return ZkWitness(
-        issuerSigR = if (sig.isNotEmpty()) sig.copyOfRange(0, half) else ByteArray(0),
-        issuerSigS = if (sig.isNotEmpty()) sig.copyOfRange(half, sig.size) else ByteArray(0),
-        sigStructure = document.issuerAuth.cborEncode(),
-        mso = document.issuerAuth.payload ?: ByteArray(0),
-        birthDateItem = birthItem?.cborEncode() ?: ByteArray(0),
-        nationalityItem = natItem?.cborEncode() ?: ByteArray(0),
-        birthDate = birthItem?.asDateString().orEmpty(),
-        nationalities = natItem?.asNumericNationalities().orEmpty(),
-        digestIds = buildMap {
-            birthItem?.let { put(ZK_CONTRACT.elementBirthDate, it.digestId.toUInt()) }
-            natItem?.let { put(ZK_CONTRACT.elementNationality, it.digestId.toUInt()) }
-        },
-    )
-}
+): ZkMdocWitness = ZkMdocWitness(
+    document = Cbor.encode(document.toDataItem()),
+    // ponytail: trust the credential's own issuer chain. The prover only needs a root that
+    // validates the credential it already holds; the VERIFIER independently re-checks the issuer
+    // key against its own trust anchors. Swap for the app's bundled issuer roots if the prover
+    // must reject out-of-trust-store credentials at proof time.
+    trustedIssuerCertificates = document.issuerCertChain.certificates.map { it.encoded.toByteArray() },
+)
 
 /** Wraps the proof + asserted boolean results into a Multipaz [ZkDocument]. */
 fun ZkDocument.Companion.from(
@@ -173,44 +159,3 @@ private fun PredicateMode.Companion.from(spec: ZkSystemSpec) =
     spec.getParam<String>(ZK_CONTRACT.paramPredicateMode)
         ?.let { predicateModeFromToken(it) }
         ?: PredicateMode.AND
-
-/**
- * The COSE `Sig_structure` (ToBeSigned) for the issuer's `COSE_Sign1`. Mirrors Multipaz's internal
- * `coseBuildToBeSigned` byte-for-byte: `["Signature1", protected, external_aad(empty), payload]`,
- * where `protected` is the encoded protected-header map (empty bstr if none). `SHA256(this)` is the
- * message the issuer signed.
- */
-private fun CoseSign1.cborEncode(): ByteArray {
-    val protected = if (this.protectedHeaders.isNotEmpty()) {
-        Cbor.encode(buildCborMap {
-            this@cborEncode.protectedHeaders.forEach { (l, di) ->
-                put(
-                    l.toDataItem(),
-                    di
-                )
-            }
-        })
-    } else {
-        ByteArray(0)
-    }
-    return Cbor.encode(
-        buildCborArray {
-            add("Signature1")
-            add(protected)
-            add(ByteArray(0)) // external_aad
-            add(this@cborEncode.payload ?: ByteArray(0))
-        }
-    )
-}
-
-/** `IssuerSignedItemBytes` = `#6.24(bstr .cbor IssuerSignedItem)`; `SHA256(this)` is the MSO digest. */
-private fun IssuerSignedItem.cborEncode(): ByteArray =
-    Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(this.dataItem))))
-
-/** mdoc `nationality` is an array of ISO alpha-2 strings; map to numeric via the SDK. */
-private fun IssuerSignedItem.asNumericNationalities(): List<UInt> =
-    this.dataElementValue.asArray.mapNotNull { isoAlpha2ToNumeric(it.asTstr) }
-
-/** Extracts the date string from a full-date/tdate (`tag 1004`/`tag 0`) or a plain text value. */
-private fun IssuerSignedItem.asDateString(): String =
-    this.dataElementValue.let { if (it is Tagged) it.asTagged.asTstr else it.asTstr }

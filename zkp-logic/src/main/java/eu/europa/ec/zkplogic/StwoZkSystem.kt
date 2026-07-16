@@ -16,8 +16,8 @@
 
 package eu.europa.ec.zkplogic
 
+import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
-import com.kss.euid.zk.sdk.ZkWitness
 import com.kss.euid.zk.sdk.proveIdentity
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
@@ -83,7 +83,7 @@ class StwoZkSystem : ZkSystem {
             sessionTranscript = sessionTranscript,
             timestamp = timestamp
         );
-        val witness = ZkWitness.from(document)
+        val witness = ZkMdocWitness.from(document)
 
         val proof: ByteArray = proveIdentity(statement, witness)
 

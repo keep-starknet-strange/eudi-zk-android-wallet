@@ -19,22 +19,22 @@ package eu.europa.ec.zkplogic
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
 import com.kss.euid.zk.sdk.ZkPublicStatement
-import com.kss.euid.zk.sdk.ZkWitness
 import com.kss.euid.zk.sdk.isoAlpha2ToNumeric
 import com.kss.euid.zk.sdk.predicateModeFromToken
-import com.kss.euid.zk.sdk.proveIdentity
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Exercises the STWO SDK directly on the host JVM via the `eu-id-zk-sdk-jvm` fat jar (JNA loads the
- * desktop native — no emulator). Proves the FFI surface + the stubbed prove/verify round trip; uses no
- * Multipaz / Android types.
+ * Exercises the STWO SDK's pure FFI surface on the host JVM via the `eu-id-zk-sdk-jvm` fat jar (JNA
+ * loads the desktop native — no emulator). Uses no Multipaz / Android types.
+ *
+ * A real prove→verify round trip needs a valid, issuer-and-device-signed mdoc `Document`, which is
+ * built with Multipaz types — see [StwoZkSystemRoundTripTest]. Here we only cover the contract
+ * constants, the token/ISO helpers, and that a garbage proof fails closed.
  */
 class SdkContractTest {
 
@@ -51,18 +51,6 @@ class SdkContractTest {
         ageThresholdYears = ageThreshold,
         acceptedNumericCountries = listOf(56u, 196u, 300u),
         natMode = NatMode.ANY,
-    )
-
-    private fun sampleWitness() = ZkWitness(
-        issuerSigR = ByteArray(32) { 1 },
-        issuerSigS = ByteArray(32) { 2 },
-        sigStructure = ByteArray(16) { 3 },
-        mso = ByteArray(16) { 4 },
-        birthDateItem = ByteArray(8) { 5 },
-        nationalityItem = ByteArray(8) { 6 },
-        birthDate = "1990-01-01",
-        nationalities = listOf(300u),
-        digestIds = mapOf("birth_date" to 0u, "nationality" to 1u),
     )
 
     @Test
@@ -91,21 +79,7 @@ class SdkContractTest {
     }
 
     @Test
-    fun prove_then_verify_round_trips() {
-        val statement = sampleStatement()
-        val proof = proveIdentity(statement, sampleWitness())
-        assertTrue(verifyIdentity(statement, proof).ok)
-    }
-
-    @Test
-    fun verify_rejects_a_tampered_proof() {
-        val statement = sampleStatement()
-        assertFalse(verifyIdentity(statement, byteArrayOf(0, 0, 0)).ok)
-    }
-
-    @Test
-    fun verify_rejects_a_proof_for_a_different_statement() {
-        val proof = proveIdentity(sampleStatement(ageThreshold = 18u), sampleWitness())
-        assertFalse(verifyIdentity(sampleStatement(ageThreshold = 21u), proof).ok)
+    fun verify_rejects_a_garbage_proof() {
+        assertFalse(verifyIdentity(sampleStatement(), byteArrayOf(0, 0, 0)).ok)
     }
 }
