@@ -237,6 +237,13 @@ private fun getToolbarConfig(
                     throttleClicks = true,
                 ),
                 ToolbarActionUi(
+                    text = stringResource(R.string.document_details_toolbar_action_reissue_mldsa),
+                    icon = null,
+                    onClick = { onEventSend(Event.ReIssueMlDsaPressed) },
+                    enabled = !state.isLoading,
+                    throttleClicks = true,
+                ),
+                ToolbarActionUi(
                     text = stringResource(R.string.document_details_toolbar_action_remove),
                     icon = null,
                     onClick = { onEventSend(Event.SecondaryButtonPressed) },

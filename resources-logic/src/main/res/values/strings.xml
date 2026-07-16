@@ -345,6 +345,7 @@
     <string name="document_details_bottom_sheet_delete_secondary_button_text">@string/generic_bottom_sheet_delete_secondary_button_text</string>
 
     <string name="document_details_toolbar_action_reissue">Re-issue</string>
+    <string name="document_details_toolbar_action_reissue_mldsa">Re-issue ML-DSA</string>
     <string name="document_details_toolbar_action_remove">Remove</string>
 
     <string name="document_details_document_credentials_info_text">Instances remaining %d/%d</string>

@@ -43,8 +43,7 @@ class SdkContractTest {
         version = 1u,
         doctype = "eu.europa.ec.eudi.pid.1",
         namespace = "eu.europa.ec.eudi.pid.1",
-        issuerKeyX = ByteArray(32) { 0x11 },
-        issuerKeyY = ByteArray(32) { 0x22 },
+        issuerPublicKeyHash = ByteArray(32) { 0x11 }, // SHA-256 of the trusted issuer pkEncode
         todayEpochDay = 7305,
         nonce = byteArrayOf(0xA, 0xB, 0xC),
         predicateMode = PredicateMode.AND,

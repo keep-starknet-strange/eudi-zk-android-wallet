@@ -68,6 +68,11 @@ sealed class DocumentDetailsInteractorPartialState {
     data class Failure(val error: String) : DocumentDetailsInteractorPartialState()
 }
 
+sealed class DocumentDetailsInteractorReIssueMlDsaPartialState {
+    data object Success : DocumentDetailsInteractorReIssueMlDsaPartialState()
+    data class Failure(val errorMessage: String) : DocumentDetailsInteractorReIssueMlDsaPartialState()
+}
+
 sealed class DocumentDetailsInteractorDeleteDocumentPartialState {
     data object SingleDocumentDeleted : DocumentDetailsInteractorDeleteDocumentPartialState()
     data object AllDocumentsDeleted : DocumentDetailsInteractorDeleteDocumentPartialState()
@@ -111,6 +116,10 @@ interface DocumentDetailsInteractor {
         documentId: String,
         issuerId: String
     ): Flow<DocumentDetailsInteractorIssuancePartialState>
+
+    fun reIssueDocumentAsMlDsa(
+        documentId: DocumentId
+    ): Flow<DocumentDetailsInteractorReIssueMlDsaPartialState>
 
     fun handleUserAuth(
         context: Context,
@@ -328,6 +337,21 @@ class DocumentDetailsInteractorImpl(
         }
     }.safeAsync {
         DocumentDetailsInteractorIssuancePartialState.Failure(
+            errorMessage = it.localizedMessage ?: genericErrorMsg
+        )
+    }
+
+    override fun reIssueDocumentAsMlDsa(
+        documentId: DocumentId
+    ): Flow<DocumentDetailsInteractorReIssueMlDsaPartialState> = flow {
+        val converted = walletCoreDocumentsController.reIssueDocumentAsMlDsa(documentId)
+        if (converted != null) {
+            emit(DocumentDetailsInteractorReIssueMlDsaPartialState.Success)
+        } else {
+            emit(DocumentDetailsInteractorReIssueMlDsaPartialState.Failure(genericErrorMsg))
+        }
+    }.safeAsync {
+        DocumentDetailsInteractorReIssueMlDsaPartialState.Failure(
             errorMessage = it.localizedMessage ?: genericErrorMsg
         )
     }

@@ -28,38 +28,41 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Ignore
 import org.junit.Test
-import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
-import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.X509CertChain
+import org.multipaz.cose.CoseTextLabel
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import java.security.MessageDigest
 import kotlin.time.Instant
 
 /**
- * Mapping + witness construction for [StwoZkSystem] against a synthetic PID [MdocDocument] fixture.
+ * Mapping + witness construction for [StwoZkSystem] against a synthetic ML-DSA-issuer PID
+ * [MdocDocument] fixture.
  *
- * The full prove→verify round trip ([generate_then_verify_round_trips]) is [Ignore]d: the updated
- * STWO SDK runs the *real* prover (no stub), so it requires a genuinely issuer- and device-signed
- * mdoc `Document` — the dummy fixture below is not circuit-valid. Re-enable it once a real fixture
- * exists; the most reliable source is a golden capture from an on-device ZK presentation (dump the
- * exact `Cbor.encode(document.toDataItem())` + sessionTranscript that feed `proveIdentity`, commit
- * as a test resource, and drive prove→verify off those bytes).
+ * The full prove→verify round trip ([generate_then_verify_round_trips]) is [Ignore]d: the STWO SDK
+ * runs the *real* prover, so it requires a genuinely ML-DSA-issuer- and device-signed mdoc `Document`
+ * — the dummy fixture below is not circuit-valid. Re-enable it once a real fixture exists; the most
+ * reliable source is a golden capture from an on-device ZK presentation (dump the exact
+ * `Cbor.encode(document.toDataItem())` + sessionTranscript that feed `proveMdocPid`, commit as a test
+ * resource, and drive prove→verify off those bytes).
  */
 class StwoZkSystemRoundTripTest {
 
     private val contract = zkContractV1()
-    private val transcript = Tstr("session-transcript")
+    private val transcript = "session-transcript".toDataItem()
     private val timestamp = Instant.fromEpochSeconds(EPOCH_DAY * 86_400L)
 
     private fun pidSpec() = ZkSystemSpec(id = contract.specIdPid, system = contract.systemName).apply {
@@ -71,11 +74,21 @@ class StwoZkSystemRoundTripTest {
     }
 
     private fun fixtureDocument(): MdocDocument {
-        val certChain = X509CertChain(listOf(X509Cert.fromPem(ISSUER_CERT_PEM)))
+        // ML-DSA-65 issuerAuth: protected {1:-49}, unprotected {issuerKey: AKP COSE_Key{1:7,3:-49,-1:pk}},
+        // NO x5chain — matching the eu-id `mldsa_fixture` format. Payload/signature are dummy (this
+        // fixture never reaches the real prover; the round trip is @Ignore'd).
         val issuerAuth = CoseSign1(
-            protectedHeaders = mapOf(CoseNumberLabel(Cose.COSE_LABEL_ALG) to (-7L).toDataItem()), // ES256
-            unprotectedHeaders = mapOf(CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to certChain.toDataItem()),
-            signature = ByteArray(64) { it.toByte() }, // dummy r||s; not circuit-valid (round trip is @Ignore'd)
+            protectedHeaders = mapOf<CoseLabel, DataItem>(
+                CoseNumberLabel(Cose.COSE_LABEL_ALG) to COSE_ALG_ML_DSA_65.toDataItem(),
+            ),
+            unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+                CoseTextLabel("issuerKey") to buildCborMap {
+                    put(1.toDataItem(), COSE_KTY_AKP.toDataItem())
+                    put(3.toDataItem(), COSE_ALG_ML_DSA_65.toDataItem())
+                    put((-1).toDataItem(), Bstr(ISSUER_PK))
+                },
+            ),
+            signature = ByteArray(3309) { it.toByte() }, // dummy ML-DSA sig; not circuit-valid
             payload = byteArrayOf(0xA1.toByte(), 0x00), // dummy MSO bytes (never decoded on our path)
         )
         val birthItem = IssuerSignedItem.fromValues(
@@ -110,10 +123,11 @@ class StwoZkSystemRoundTripTest {
     @Test
     fun forProver_extracts_issuer_key_and_predicate_params() {
         val statement = ZkPublicStatement.forProver(pidSpec(), fixtureDocument(), transcript, timestamp)
-        val key = X509Cert.fromPem(ISSUER_CERT_PEM).ecPublicKey as EcPublicKeyDoubleCoordinate
 
-        assertArrayEquals(key.x, statement.issuerKeyX)
-        assertArrayEquals(key.y, statement.issuerKeyY)
+        assertArrayEquals(
+            MessageDigest.getInstance("SHA-256").digest(ISSUER_PK),
+            statement.issuerPublicKeyHash,
+        )
         assertEquals(contract.doctypePid, statement.doctype)
         assertEquals(PredicateMode.AND, statement.predicateMode)
         assertEquals(18u, statement.ageThresholdYears)
@@ -123,21 +137,18 @@ class StwoZkSystemRoundTripTest {
     }
 
     @Test
-    fun witness_wraps_full_document_and_issuer_chain() {
+    fun witness_wraps_full_document_and_issuer_key() {
         val witness = ZkMdocWitness.from(fixtureDocument())
 
-        // The new SDK parses the mdoc itself, so the witness is just the full `Document` CBOR plus
-        // the credential's issuer chain (the prover's trusted-root set).
+        // The SDK parses the mdoc itself, so the witness is just the full `Document` CBOR plus the
+        // credential's ML-DSA issuer public key (the prover's trusted-key set).
         assertTrue("document CBOR should be non-empty", witness.document.isNotEmpty())
-        assertEquals(1, witness.trustedIssuerCertificates.size)
-        assertArrayEquals(
-            X509Cert.fromPem(ISSUER_CERT_PEM).encoded.toByteArray(),
-            witness.trustedIssuerCertificates.first(),
-        )
+        assertEquals(1, witness.trustedIssuerPublicKeys.size)
+        assertArrayEquals(ISSUER_PK, witness.trustedIssuerPublicKeys.first())
     }
 
     @Test
-    @Ignore("Real STWO prover needs a circuit-valid issuer+device-signed mdoc; capture a golden device fixture first (see class KDoc).")
+    @Ignore("Real STWO prover needs a circuit-valid ML-DSA issuer+device-signed mdoc; capture a golden device fixture first (see class KDoc).")
     fun generate_then_verify_round_trips() {
         val system = StwoZkSystem()
         val spec = pidSpec()
@@ -152,20 +163,10 @@ class StwoZkSystemRoundTripTest {
 
     private companion object {
         const val EPOCH_DAY = 19_000L
+        const val COSE_ALG_ML_DSA_65 = -49L
+        const val COSE_KTY_AKP = 7L
 
-        // A throwaway self-signed P-256 cert (test only) — gives the fixture an issuer EC public key.
-        val ISSUER_CERT_PEM = """
-            -----BEGIN CERTIFICATE-----
-            MIIBijCCAS+gAwIBAgIUD5W94iNIiz8ZdXt9Anu2EH94MM0wCgYIKoZIzj0EAwIw
-            GjEYMBYGA1UEAwwPVGVzdCBQSUQgSXNzdWVyMB4XDTI2MDYxODEwMTkxNVoXDTM2
-            MDYxNTEwMTkxNVowGjEYMBYGA1UEAwwPVGVzdCBQSUQgSXNzdWVyMFkwEwYHKoZI
-            zj0CAQYIKoZIzj0DAQcDQgAErp+zN6paRhj8aMYknrg6M2gBjTxpkbyqmzd7hZeU
-            o3F1Ke7zHzS8v0rJmTPVfT1MdUdMOaVQNAypYdv48ySe8KNTMFEwHQYDVR0OBBYE
-            FB/exQsXrPp9tIgpN98cUD0mDksWMB8GA1UdIwQYMBaAFB/exQsXrPp9tIgpN98c
-            UD0mDksWMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSQAwRgIhAM3OSldS
-            0oAHH9uawA9jfayzSmwul9f0iAynDysnGKKpAiEAr5wj/3wf4Nc0yu9g12ukgMW7
-            ZdHmLmHN9G4CRL5iKrU=
-            -----END CERTIFICATE-----
-        """.trimIndent()
+        // A deterministic stand-in for the issuer's ML-DSA-65 `pkEncode` (1952 bytes).
+        val ISSUER_PK = ByteArray(1_952) { (it and 0xFF).toByte() }
     }
 }

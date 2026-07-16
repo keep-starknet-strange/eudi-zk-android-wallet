@@ -62,6 +62,7 @@ import eu.europa.ec.storagelogic.dao.BookmarkDao
 import eu.europa.ec.storagelogic.dao.FailedReIssuedDocumentDao
 import eu.europa.ec.storagelogic.dao.RevokedDocumentDao
 import eu.europa.ec.storagelogic.dao.TransactionLogDao
+import eu.europa.ec.zkplogic.convertPidToMlDsa
 import eu.europa.ec.storagelogic.model.Bookmark
 import eu.europa.ec.storagelogic.model.FailedReIssuedDocument
 import kotlinx.coroutines.CoroutineDispatcher
@@ -178,6 +179,13 @@ interface WalletCoreDocumentsController {
         allowAuthorizationFallback: Boolean,
         prioritizeDeferred: Boolean = false
     ): Flow<IssueDocumentsPartialState>
+
+    /**
+     * TEST BRIDGE: convert an existing P-256 PID into an ML-DSA-signed mdoc (demo issuer + mock
+     * device key) via the SDK, and return the converted `IssuerSigned` CBOR (null on failure).
+     * Storing the result as a new document is intentionally deferred — see the implementation.
+     */
+    suspend fun reIssueDocumentAsMlDsa(documentId: DocumentId): ByteArray?
 
     fun deleteDocument(
         documentId: DocumentId,
@@ -344,6 +352,28 @@ class WalletCoreDocumentsControllerImpl(
 
     override fun getDocumentById(documentId: DocumentId): Document? {
         return eudiWallet.getDocumentById(documentId = documentId)
+    }
+
+    override suspend fun reIssueDocumentAsMlDsa(documentId: DocumentId): ByteArray? {
+        val document = eudiWallet.getDocumentById(documentId = documentId) as? IssuedDocument
+            ?: return null
+        // The stored credential bytes are the ISO `IssuerSigned` CBOR (nameSpaces + issuerAuth).
+        val p256IssuerSigned = document.findCredential()?.issuerProvidedData?.toByteArray()
+            ?: return null
+
+        // TEST BRIDGE: re-issue the real P-256 PID under the demo ML-DSA issuer, rebinding it to the
+        // mock demo ML-DSA device key. Result is a genuine ML-DSA-signed `IssuerSigned` the prover
+        // accepts (verifier pins sha256(demoIssuerPublicKey())).
+        val mlDsaIssuerSigned = convertPidToMlDsa(p256IssuerSigned)
+
+        // TODO(pq-storage): store `mlDsaIssuerSigned` as a NEW document (do not replace the P-256 one).
+        //  Deferred: the mdoc store certifier parses the MSO deviceKey as a P-256 EcPublicKey and
+        //  matches it to the new credential's SecureArea key, so the stock createDocument +
+        //  storeIssuedDocument rejects the mock ML-DSA device key. Needs a certifier bypass now, or a
+        //  real secure-enclave ML-DSA device key later.
+        // storeMlDsaDocument(document, mlDsaIssuerSigned)
+
+        return mlDsaIssuerSigned
     }
 
     override fun getMainPidDocument(): IssuedDocument? =
