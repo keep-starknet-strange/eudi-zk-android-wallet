@@ -18,8 +18,8 @@ package eu.europa.ec.zkplogic
 
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
-import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
+import com.kss.euid.zk.sdk.demoIssuerPublicKey
 import com.kss.euid.zk.sdk.predicateModeFromToken
 import com.kss.euid.zk.sdk.predicateModeUsesAge
 import com.kss.euid.zk.sdk.predicateModeUsesNat
@@ -28,7 +28,6 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.toDataItem
-import org.multipaz.cose.CoseTextLabel
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
@@ -36,10 +35,13 @@ import org.multipaz.mdoc.zkp.ZkSystemSpec
 import java.security.MessageDigest
 import kotlin.time.Instant
 
-/** Public statement at proving time — `today` derives from the proof [timestamp] (device clock) TODO. */
+/**
+ * Public statement at proving time. The issuer key hash is the **demo** ML-DSA issuer's — the
+ * in-memory re-signed document re-issues the PID under it — so `forProver` doesn't
+ * read the presented (P-256) document's issuer key. `today` derives from the proof [timestamp].
+ */
 fun ZkPublicStatement.Companion.forProver(
     spec: ZkSystemSpec,
-    document: MdocDocument,
     sessionTranscript: DataItem,
     timestamp: Instant
 ): ZkPublicStatement {
@@ -54,7 +56,7 @@ fun ZkPublicStatement.Companion.forProver(
         version = (spec.getParam<Long>(ZK_CONTRACT.paramVersion) ?: 1L).toUInt(),
         doctype = ZK_CONTRACT.doctypePid,
         namespace = ZK_CONTRACT.pidNamespace,
-        issuerPublicKeyHash = sha256(document.mldsaIssuerPublicKey()),
+        issuerPublicKeyHash = sha256(demoIssuerPublicKey()),
         todayEpochDay = timestamp.epochDay(), // TODO maybe not use system clock
         nonce = Cbor.encode(sessionTranscript),
         predicateMode = mode,
@@ -79,25 +81,6 @@ fun ZkPublicStatement.Companion.forVerifier(
 ): ZkPublicStatement = throw NotImplementedError(
     "ML-DSA verify-side issuer-key sourcing is not wired wallet-side (no x5chain in the PQ mdoc; " +
         "the verifier app pins the trusted issuer key hash)."
-)
-
-/**
- * Witness (prove side only). The new SDK parses the whole mdoc itself — issuer signature, MSO,
- * disclosed items, AND the device signature (holder binding is now proven in-circuit) — so we hand
- * it the full ISO 18013-5 `Document` CBOR instead of pre-extracting fields.
- *
- * The device signature inside [document] is real: Multipaz signs `DeviceAuthentication` via the
- * credential's SecureArea in `MdocDocument.fromPresentment`, before `generateProof` is ever called.
- */
-fun ZkMdocWitness.Companion.from(
-    document: MdocDocument,
-): ZkMdocWitness = ZkMdocWitness(
-    document = Cbor.encode(document.toDataItem()),
-    // ponytail: trust the credential's own issuer key. The prover only needs a key that validates
-    // the credential it already holds; the VERIFIER independently re-checks the issuer key hash
-    // against its own trust anchors. Swap for the app's bundled issuer keys if the prover must
-    // reject out-of-trust-store credentials at proof time.
-    trustedIssuerPublicKeys = listOf(document.mldsaIssuerPublicKey()),
 )
 
 /** Wraps the proof + asserted boolean results into a Multipaz [ZkDocument]. */
@@ -128,20 +111,6 @@ fun ZkDocument.Companion.from(
         msoX5chain = null, // ML-DSA PID carries no x5chain; issuer trust is by pinned pkEncode hash.
     )
     return ZkDocument(documentData = data, proof = ByteString(proof))
-}
-
-private const val COSE_KTY_AKP = 7L
-
-/**
- * The issuer's raw ML-DSA-65 public key (FIPS 204 `pkEncode`, 1952 bytes) from the `issuerAuth`
- * unprotected `issuerKey` COSE_Key (`{1: AKP, 3: -49, -1: pk}`). The PQ mdoc has no `x5chain`; the
- * key rides in the unprotected header (see the eu-id `mldsa_fixture` format).
- */
-private fun MdocDocument.mldsaIssuerPublicKey(): ByteArray {
-    val coseKey = issuerAuth.unprotectedHeaders[CoseTextLabel("issuerKey")]
-        ?: throw IllegalArgumentException("issuerAuth is missing the ML-DSA issuerKey (unprotected COSE_Key)")
-    require(coseKey[1L].asNumber == COSE_KTY_AKP) { "issuerKey is not an AKP (ML-DSA) COSE_Key" }
-    return coseKey[-1L].asBstr
 }
 
 private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)

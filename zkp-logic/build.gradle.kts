@@ -27,6 +27,11 @@ plugins {
 extensions.configure<LibraryExtension>("android") {
     namespace = "eu.europa.ec.zkplogic"
 
+    defaultConfig {
+        // Runs the on-device instrumented probe (ML-DSA Keystore round-trip) via connectedAndroidTest.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
     testOptions {
         // Host JVM unit tests load the SDK's host-native via JNA; don't fail on incidental
         // Android API calls.
@@ -46,4 +51,11 @@ dependencies {
     // so JNA loads the real (stubbed) prover/verifier on the host — no emulator needed.
     testImplementation(libs.junit4)
     testImplementation(libs.euid.zk.sdk.jvm)
+
+    // On-device instrumented probe (Android Keystore ML-DSA round-trip). The SDK AAR carries the
+    // native .so + `demoVerifyMldsa`; the test runs on a real device via connectedAndroidTest.
+    androidTestImplementation(libs.euid.zk.sdk)
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext)
 }

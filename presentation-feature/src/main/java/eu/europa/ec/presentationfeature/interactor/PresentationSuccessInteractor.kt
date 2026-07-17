@@ -24,6 +24,7 @@ import eu.europa.ec.commonfeature.extension.toExpandableListItems
 import eu.europa.ec.commonfeature.interactor.ScopedPresentationInteractor
 import eu.europa.ec.commonfeature.interactor.ScopedPresentationInteractorDelegate
 import eu.europa.ec.commonfeature.util.transformPathsToDomainClaims
+import eu.europa.ec.commonfeature.util.zkProofMetricsCard
 import eu.europa.ec.corelogic.controller.WalletCoreDocumentsController
 import eu.europa.ec.corelogic.controller.WalletCorePresentationController
 import eu.europa.ec.corelogic.extension.toClaimPath
@@ -130,6 +131,9 @@ class PresentationSuccessInteractorImpl(
                 } catch (_: Exception) {
                 }
             }
+
+            // Surface the last ZK proof's metrics (consume-once; null on a non-ZK presentation).
+            zkProofMetricsCard()?.let { documentsUi.add(it) }
 
             val headerConfigDescription = if (documentsUi.isEmpty()) {
                 resourceProvider.getString(R.string.document_success_header_description_when_error)

@@ -27,7 +27,6 @@ import eu.europa.ec.dashboardfeature.interactor.DocumentDetailsInteractorDeleteB
 import eu.europa.ec.dashboardfeature.interactor.DocumentDetailsInteractorDeleteDocumentPartialState
 import eu.europa.ec.dashboardfeature.interactor.DocumentDetailsInteractorIssuancePartialState
 import eu.europa.ec.dashboardfeature.interactor.DocumentDetailsInteractorPartialState
-import eu.europa.ec.dashboardfeature.interactor.DocumentDetailsInteractorReIssueMlDsaPartialState
 import eu.europa.ec.dashboardfeature.interactor.DocumentDetailsInteractorStoreBookmarkPartialState
 import eu.europa.ec.dashboardfeature.ui.documents.detail.DocumentDetailsBottomSheetContent.BookmarkRemovedInfo
 import eu.europa.ec.dashboardfeature.ui.documents.detail.DocumentDetailsBottomSheetContent.BookmarkStoredInfo
@@ -100,7 +99,6 @@ sealed class Event : ViewEvent {
     data object IssuerCardPressed : Event()
     data class OnRevocationStatusChanged(val revokedIds: List<String>) : Event()
     data class OnReIssuanceTriggered(val reIssuedIds: List<String>) : Event()
-    data object ReIssueMlDsaPressed : Event()
 
     sealed class IssuerDetails : Event() {
         data object OnExpandedStateChanged : IssuerDetails()
@@ -243,10 +241,6 @@ class DocumentDetailsViewModel(
 
             is Event.OnReIssuanceTriggered -> {
                 checkIfRemoved(event.reIssuedIds)
-            }
-
-            is Event.ReIssueMlDsaPressed -> {
-                reIssueDocumentAsMlDsa()
             }
 
             is Event.IssuerDetails.OnExpandedStateChanged -> toggleIssuerDetailsCardExpansionState()
@@ -558,36 +552,6 @@ class DocumentDetailsViewModel(
                                 }
                             )
                         )
-                    }
-                }
-            }
-        }
-    }
-
-    private fun reIssueDocumentAsMlDsa() {
-        val documentId = viewState.value.documentDetailsUi?.documentId ?: return
-
-        setState { copy(isLoading = true, error = null) }
-
-        viewModelScope.launch {
-            documentDetailsInteractor.reIssueDocumentAsMlDsa(documentId).collect {
-                when (it) {
-                    // Conversion succeeded; storing it as a new ML-DSA document is deferred (see interactor).
-                    is DocumentDetailsInteractorReIssueMlDsaPartialState.Success -> {
-                        setState { copy(isLoading = false, error = null) }
-                    }
-
-                    is DocumentDetailsInteractorReIssueMlDsaPartialState.Failure -> {
-                        setState {
-                            copy(
-                                isLoading = false,
-                                error = ContentErrorConfig(
-                                    onRetry = { setEvent(Event.ReIssueMlDsaPressed) },
-                                    errorSubTitle = it.errorMessage,
-                                    onCancel = { setEvent(Event.DismissError) }
-                                )
-                            )
-                        }
                     }
                 }
             }

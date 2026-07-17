@@ -18,8 +18,8 @@ package eu.europa.ec.zkplogic
 
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
-import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
+import com.kss.euid.zk.sdk.demoIssuerPublicKey
 import com.kss.euid.zk.sdk.zkContractV1
 import kotlinx.datetime.LocalDate
 import kotlinx.io.bytestring.ByteString
@@ -121,11 +121,13 @@ class StwoZkSystemRoundTripTest {
     }
 
     @Test
-    fun forProver_extracts_issuer_key_and_predicate_params() {
-        val statement = ZkPublicStatement.forProver(pidSpec(), fixtureDocument(), transcript, timestamp)
+    fun forProver_uses_demo_issuer_and_predicate_params() {
+        val statement = ZkPublicStatement.forProver(pidSpec(), transcript, timestamp)
 
+        // In-memory re-sign proves under the demo ML-DSA issuer, so the statement pins its hash
+        // (not the presented document's issuer key).
         assertArrayEquals(
-            MessageDigest.getInstance("SHA-256").digest(ISSUER_PK),
+            MessageDigest.getInstance("SHA-256").digest(demoIssuerPublicKey()),
             statement.issuerPublicKeyHash,
         )
         assertEquals(contract.doctypePid, statement.doctype)
@@ -134,17 +136,6 @@ class StwoZkSystemRoundTripTest {
         assertEquals(listOf(300u, 196u), statement.acceptedNumericCountries)
         assertEquals(NatMode.ANY, statement.natMode)
         assertEquals(EPOCH_DAY.toInt(), statement.todayEpochDay)
-    }
-
-    @Test
-    fun witness_wraps_full_document_and_issuer_key() {
-        val witness = ZkMdocWitness.from(fixtureDocument())
-
-        // The SDK parses the mdoc itself, so the witness is just the full `Document` CBOR plus the
-        // credential's ML-DSA issuer public key (the prover's trusted-key set).
-        assertTrue("document CBOR should be non-empty", witness.document.isNotEmpty())
-        assertEquals(1, witness.trustedIssuerPublicKeys.size)
-        assertArrayEquals(ISSUER_PK, witness.trustedIssuerPublicKeys.first())
     }
 
     @Test

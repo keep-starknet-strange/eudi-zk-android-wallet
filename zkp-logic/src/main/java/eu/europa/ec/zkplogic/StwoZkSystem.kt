@@ -18,10 +18,16 @@ package eu.europa.ec.zkplogic
 
 import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
+import com.kss.euid.zk.sdk.demoBuildMlDsaWitness
+import com.kss.euid.zk.sdk.demoDeviceAuthSigStructure
+import com.kss.euid.zk.sdk.demoIssuerPublicKey
+import com.kss.euid.zk.sdk.demoMintMlDsaSignedPidMdoc
 import com.kss.euid.zk.sdk.proveIdentity
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -29,6 +35,7 @@ import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import kotlin.system.measureTimeMillis
 import kotlin.time.Instant
 
 /**
@@ -73,19 +80,33 @@ class StwoZkSystem : ZkSystem {
 
     override fun generateProof(
         zkSystemSpec: ZkSystemSpec,
-        document: MdocDocument,
+        document: MdocDocument, // P256 compatible
         sessionTranscript: DataItem,
         timestamp: Instant,
     ): ZkDocument {
+        // Re-sign the presented P-256 PID in-memory as ML-DSA (demo issuer + real device key),
+        // then prove. The presented doc's own P-256 signatures are discarded.
+        lateinit var witnessDoc: ByteArray
+        val reissueMs = measureTimeMillis {
+            witnessDoc = buildMlDsaWitnessDocument(document, sessionTranscript)
+        }
+
         val statement = ZkPublicStatement.forProver(
             spec = zkSystemSpec,
-            document = document,
             sessionTranscript = sessionTranscript,
             timestamp = timestamp
-        );
-        val witness = ZkMdocWitness.from(document)
+        )
+        val witness = ZkMdocWitness(
+            document = witnessDoc,
+            trustedIssuerPublicKeys = listOf(demoIssuerPublicKey()),
+        )
 
-        val proof: ByteArray = proveIdentity(statement, witness)
+        lateinit var proof: ByteArray
+        val proveMs = measureTimeMillis { proof = proveIdentity(statement, witness) }
+
+        ZkProofMetrics.record(
+            ZkProofMetrics.Snapshot(reissueMs = reissueMs, proveMs = proveMs, proofSizeBytes = proof.size)
+        )
 
         return ZkDocument.from(zkSystemSpec, document, proof, timestamp)
     }
@@ -114,4 +135,38 @@ class StwoZkSystem : ZkSystem {
             it.namespaceName == ZK_CONTRACT.pidNamespace && it.dataElementName in supported
         }
     }
+
+    /**
+     * Build the full ISO 18013-5 `Document` CBOR the prover consumes as its witness, re-signed in memory
+     * as ML-DSA over the presented P-256 [document]:
+     * - issuer arm: demo ML-DSA issuer, MSO `deviceKey` = the real Keystore device key;
+     * - device arm: `deviceSignature` over `DeviceAuthentication(sessionTranscript, docType)`, produced by
+     *   the real Keystore key ([MlDsaDeviceKey.sign]).
+     *
+     * The presented document's own P-256 issuer + device signatures are discarded — only its namespaces,
+     * MSO digests, and docType are carried through.
+     */
+    private fun buildMlDsaWitnessDocument(document: MdocDocument, sessionTranscript: DataItem): ByteArray {
+        // Lift the real P-256 IssuerSigned (nameSpaces + issuerAuth) from the presented document.
+        val p256IssuerSigned = Cbor.encode(
+            buildCborMap {
+                put("nameSpaces", document.issuerNamespaces.toDataItem())
+                put("issuerAuth", document.issuerAuth.toDataItem())
+            }
+        )
+
+        // Offload to SDK to mint the doc with ML-DSA issuer key
+        val mlDsaIssuerSigned = demoMintMlDsaSignedPidMdoc(
+            p256IssuerSigned = p256IssuerSigned,
+            devicePublicKey = MlDsaDeviceKey.publicKey()
+        )
+
+        // Device arm: sign DeviceAuthentication with the real hardware-backed device key.
+        val transcript = Cbor.encode(sessionTranscript)
+        val sigStructure = demoDeviceAuthSigStructure(transcript, document.docType)
+        val deviceSignature = MlDsaDeviceKey.sign(sigStructure)
+
+        return demoBuildMlDsaWitness(mlDsaIssuerSigned, transcript, document.docType, deviceSignature)
+    }
+
 }
