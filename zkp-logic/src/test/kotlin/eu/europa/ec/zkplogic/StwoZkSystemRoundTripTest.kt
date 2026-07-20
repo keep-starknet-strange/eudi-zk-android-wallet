@@ -19,6 +19,7 @@ package eu.europa.ec.zkplogic
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
 import com.kss.euid.zk.sdk.ZkPublicStatement
+import com.kss.euid.zk.sdk.IssuerKey
 import com.kss.euid.zk.sdk.demoIssuerPublicKey
 import com.kss.euid.zk.sdk.zkContractV1
 import kotlinx.datetime.LocalDate
@@ -122,13 +123,13 @@ class StwoZkSystemRoundTripTest {
 
     @Test
     fun forProver_uses_demo_issuer_and_predicate_params() {
-        val statement = ZkPublicStatement.forProver(pidSpec(), transcript, timestamp)
+        val statement = ZkPublicStatement.forProver(pidSpec(), fixtureDocument(), transcript, timestamp)
 
         // In-memory re-sign proves under the demo ML-DSA issuer, so the statement pins its hash
         // (not the presented document's issuer key).
         assertArrayEquals(
             MessageDigest.getInstance("SHA-256").digest(demoIssuerPublicKey()),
-            statement.issuerPublicKeyHash,
+            (statement.issuerKey as IssuerKey.MlDsa).pkHash,
         )
         assertEquals(contract.doctypePid, statement.doctype)
         assertEquals(PredicateMode.AND, statement.predicateMode)

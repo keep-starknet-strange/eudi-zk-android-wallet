@@ -16,18 +16,23 @@
 
 package eu.europa.ec.zkplogic
 
+import com.kss.euid.zk.sdk.IssuerKey
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
 import com.kss.euid.zk.sdk.ZkPublicStatement
+import com.kss.euid.zk.sdk.ZkSystemKind
 import com.kss.euid.zk.sdk.demoIssuerPublicKey
 import com.kss.euid.zk.sdk.predicateModeFromToken
 import com.kss.euid.zk.sdk.predicateModeUsesAge
 import com.kss.euid.zk.sdk.predicateModeUsesNat
 import com.kss.euid.zk.sdk.resultAgeOver
+import com.kss.euid.zk.sdk.zkSystem
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.toDataItem
+import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
@@ -36,12 +41,14 @@ import java.security.MessageDigest
 import kotlin.time.Instant
 
 /**
- * Public statement at proving time. The issuer key hash is the **demo** ML-DSA issuer's — the
- * in-memory re-signed document re-issues the PID under it — so `forProver` doesn't
- * read the presented (P-256) document's issuer key. `today` derives from the proof [timestamp].
+ * Public statement at proving time. The issuer trust anchor depends on the linked ZK system
+ * ([zkSystem]): ML-DSA pins the **demo** issuer's `pkEncode` hash (the in-memory re-signed doc
+ * re-issues the PID under it), while P-256 reads the real issuer key from the presented document's
+ * x5chain. `today` derives from the proof [timestamp].
  */
 fun ZkPublicStatement.Companion.forProver(
     spec: ZkSystemSpec,
+    document: MdocDocument,
     sessionTranscript: DataItem,
     timestamp: Instant
 ): ZkPublicStatement {
@@ -51,12 +58,22 @@ fun ZkPublicStatement.Companion.forProver(
         ?.split(",")
         ?.mapNotNull { it.trim().toUIntOrNull() }
 
+    val issuerKey = when (zkSystem()) {
+        // Demo ML-DSA issuer: the in-memory re-signed doc re-issues the PID under it.
+        ZkSystemKind.ML_DSA -> IssuerKey.MlDsa(sha256(demoIssuerPublicKey()))
+        // P-256: the real issuer key from the presented document's x5chain.
+        ZkSystemKind.P256 -> {
+            val (keyX, keyY) = document.issuerCertChain.certificates.first().ecPublicKey.toXY()
+            IssuerKey.P256(keyX, keyY)
+        }
+    }
+
     return ZkPublicStatement(
         specId = spec.id,
         version = (spec.getParam<Long>(ZK_CONTRACT.paramVersion) ?: 1L).toUInt(),
         doctype = ZK_CONTRACT.doctypePid,
         namespace = ZK_CONTRACT.pidNamespace,
-        issuerPublicKeyHash = sha256(demoIssuerPublicKey()),
+        issuerKey = issuerKey,
         todayEpochDay = timestamp.epochDay(), // TODO maybe not use system clock
         nonce = Cbor.encode(sessionTranscript),
         predicateMode = mode,
@@ -108,12 +125,23 @@ fun ZkDocument.Companion.from(
         timestamp = timestamp,
         issuerSigned = mapOf(ZK_CONTRACT.pidNamespace to resultClaims),
         deviceSigned = emptyMap(),
-        msoX5chain = null, // ML-DSA PID carries no x5chain; issuer trust is by pinned pkEncode hash.
+        // P-256 surfaces the issuer chain so the verifier can recover the key; the ML-DSA PID
+        // carries no x5chain (issuer trust is by pinned pkEncode hash).
+        msoX5chain = when (zkSystem()) {
+            ZkSystemKind.ML_DSA -> null
+            ZkSystemKind.P256 -> document.issuerCertChain
+        },
     )
     return ZkDocument(documentData = data, proof = ByteString(proof))
 }
 
 private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
+
+/** The (x, y) coordinates of a P-256 issuer key, for the P-256 ZK system's issuer pin. */
+private fun EcPublicKey.toXY(): Pair<ByteArray, ByteArray> = when (this) {
+    is EcPublicKeyDoubleCoordinate -> this.x to this.y
+    else -> throw IllegalArgumentException("Expected a P-256 double-coordinate issuer key")
+}
 
 /** Days since 1970-01-01 (UTC) from an [Instant]. */
 private fun Instant.epochDay(): Int = (this.epochSeconds / 86_400L).toInt()

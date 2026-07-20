@@ -16,8 +16,10 @@
 
 package eu.europa.ec.zkplogic
 
+import com.kss.euid.zk.sdk.TrustedIssuers
 import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
+import com.kss.euid.zk.sdk.ZkSystemKind
 import com.kss.euid.zk.sdk.demoBuildMlDsaWitness
 import com.kss.euid.zk.sdk.demoDeviceAuthSigStructure
 import com.kss.euid.zk.sdk.demoIssuerPublicKey
@@ -25,9 +27,11 @@ import com.kss.euid.zk.sdk.demoMintMlDsaSignedPidMdoc
 import com.kss.euid.zk.sdk.proveIdentity
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
+import com.kss.euid.zk.sdk.zkSystem
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -84,21 +88,35 @@ class StwoZkSystem : ZkSystem {
         sessionTranscript: DataItem,
         timestamp: Instant,
     ): ZkDocument {
-        // Re-sign the presented P-256 PID in-memory as ML-DSA (demo issuer + real device key),
-        // then prove. The presented doc's own P-256 signatures are discarded.
+        // Build the prover witness for the linked ZK system. ML-DSA re-signs the presented P-256
+        // PID in-memory (demo issuer + real device key); P-256 uses the document as-is with its
+        // x5chain as the trust anchor.
         lateinit var witnessDoc: ByteArray
+        lateinit var trustedIssuers: TrustedIssuers
         val reissueMs = measureTimeMillis {
-            witnessDoc = buildMlDsaWitnessDocument(document, sessionTranscript)
+            when (zkSystem()) {
+                ZkSystemKind.ML_DSA -> {
+                    witnessDoc = buildMlDsaWitnessDocument(document, sessionTranscript)
+                    trustedIssuers = TrustedIssuers.PublicKeys(listOf(demoIssuerPublicKey()))
+                }
+                ZkSystemKind.P256 -> {
+                    witnessDoc = Cbor.encode(document.toDataItem())
+                    trustedIssuers = TrustedIssuers.Certificates(
+                        document.issuerCertChain.certificates.map { it.encoded.toByteArray() }
+                    )
+                }
+            }
         }
 
         val statement = ZkPublicStatement.forProver(
             spec = zkSystemSpec,
+            document = document,
             sessionTranscript = sessionTranscript,
             timestamp = timestamp
         )
         val witness = ZkMdocWitness(
             document = witnessDoc,
-            trustedIssuerPublicKeys = listOf(demoIssuerPublicKey()),
+            trustedIssuers = trustedIssuers,
         )
 
         lateinit var proof: ByteArray

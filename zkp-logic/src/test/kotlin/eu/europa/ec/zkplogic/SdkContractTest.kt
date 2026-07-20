@@ -16,16 +16,18 @@
 
 package eu.europa.ec.zkplogic
 
+import com.kss.euid.zk.sdk.IssuerKey
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
 import com.kss.euid.zk.sdk.ZkPublicStatement
 import com.kss.euid.zk.sdk.isoAlpha2ToNumeric
 import com.kss.euid.zk.sdk.predicateModeFromToken
+import com.kss.euid.zk.sdk.ZkException
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -43,7 +45,7 @@ class SdkContractTest {
         version = 1u,
         doctype = "eu.europa.ec.eudi.pid.1",
         namespace = "eu.europa.ec.eudi.pid.1",
-        issuerPublicKeyHash = ByteArray(32) { 0x11 }, // SHA-256 of the trusted issuer pkEncode
+        issuerKey = IssuerKey.MlDsa(ByteArray(32) { 0x11 }), // SHA-256 of the trusted issuer pkEncode
         todayEpochDay = 7305,
         nonce = byteArrayOf(0xA, 0xB, 0xC),
         predicateMode = PredicateMode.AND,
@@ -79,6 +81,10 @@ class SdkContractTest {
 
     @Test
     fun verify_rejects_a_garbage_proof() {
-        assertFalse(verifyIdentity(sampleStatement(), byteArrayOf(0, 0, 0)).ok)
+        // A malformed envelope fails closed by throwing (inner-proof failures return ok=false).
+        // The verifier app treats any throw as unverified (runCatching { … }.getOrDefault(false)).
+        assertThrows(ZkException::class.java) {
+            verifyIdentity(sampleStatement(), byteArrayOf(0, 0, 0))
+        }
     }
 }
