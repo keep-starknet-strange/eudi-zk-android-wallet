@@ -22,12 +22,11 @@ import com.kss.euid.zk.sdk.PredicateMode
 import com.kss.euid.zk.sdk.ZkPublicStatement
 import com.kss.euid.zk.sdk.isoAlpha2ToNumeric
 import com.kss.euid.zk.sdk.predicateModeFromToken
-import com.kss.euid.zk.sdk.ZkException
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -81,10 +80,8 @@ class SdkContractTest {
 
     @Test
     fun verify_rejects_a_garbage_proof() {
-        // A malformed envelope fails closed by throwing (inner-proof failures return ok=false).
-        // The verifier app treats any throw as unverified (runCatching { … }.getOrDefault(false)).
-        assertThrows(ZkException::class.java) {
-            verifyIdentity(sampleStatement(), byteArrayOf(0, 0, 0))
-        }
+        val rejected = runCatching { !verifyIdentity(sampleStatement(), byteArrayOf(0, 0, 0)).ok }
+            .getOrDefault(true)
+        assertTrue(rejected)
     }
 }

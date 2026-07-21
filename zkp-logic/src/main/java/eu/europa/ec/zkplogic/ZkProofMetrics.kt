@@ -29,7 +29,8 @@ package eu.europa.ec.zkplogic
 object ZkProofMetrics {
 
     /** @property reissueMs in-memory P-256→ML-DSA re-sign; [proveMs] STWO proving; [proofSizeBytes] proof size. */
-    data class Snapshot(val reissueMs: Long, val proveMs: Long, val proofSizeBytes: Int)
+    /** [reissueMs] is null for P-256 (no in-memory re-sign); set only in the ML-DSA flow. */
+    data class Snapshot(val reissueMs: Long?, val proveMs: Long, val proofSizeBytes: Int)
 
     @Volatile
     private var last: Snapshot? = null

@@ -93,18 +93,21 @@ class StwoZkSystem : ZkSystem {
         // x5chain as the trust anchor.
         lateinit var witnessDoc: ByteArray
         lateinit var trustedIssuers: TrustedIssuers
-        val reissueMs = measureTimeMillis {
-            when (zkSystem()) {
-                ZkSystemKind.ML_DSA -> {
+        // Only ML-DSA re-signs/re-issues in memory, so only it has a reissue timing; P-256 uses the
+        // presented document as-is (reissueMs stays null and the metric isn't rendered).
+        var reissueMs: Long? = null
+        when (zkSystem()) {
+            ZkSystemKind.ML_DSA -> {
+                reissueMs = measureTimeMillis {
                     witnessDoc = buildMlDsaWitnessDocument(document, sessionTranscript)
-                    trustedIssuers = TrustedIssuers.PublicKeys(listOf(demoIssuerPublicKey()))
                 }
-                ZkSystemKind.P256 -> {
-                    witnessDoc = Cbor.encode(document.toDataItem())
-                    trustedIssuers = TrustedIssuers.Certificates(
-                        document.issuerCertChain.certificates.map { it.encoded.toByteArray() }
-                    )
-                }
+                trustedIssuers = TrustedIssuers.PublicKeys(listOf(demoIssuerPublicKey()))
+            }
+            ZkSystemKind.P256 -> {
+                witnessDoc = Cbor.encode(document.toDataItem())
+                trustedIssuers = TrustedIssuers.Certificates(
+                    document.issuerCertChain.certificates.map { it.encoded.toByteArray() }
+                )
             }
         }
 

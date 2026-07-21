@@ -20,13 +20,16 @@ import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
 import com.kss.euid.zk.sdk.ZkPublicStatement
 import com.kss.euid.zk.sdk.IssuerKey
+import com.kss.euid.zk.sdk.ZkSystemKind
 import com.kss.euid.zk.sdk.demoIssuerPublicKey
 import com.kss.euid.zk.sdk.zkContractV1
+import com.kss.euid.zk.sdk.zkSystem
 import kotlinx.datetime.LocalDate
 import kotlinx.io.bytestring.ByteString
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Ignore
 import org.junit.Test
 import org.multipaz.cbor.Bstr
@@ -123,6 +126,9 @@ class StwoZkSystemRoundTripTest {
 
     @Test
     fun forProver_uses_demo_issuer_and_predicate_params() {
+        // ML-DSA-specific: it pins the demo issuer hash. On a P-256 SDK build, forProver reads the
+        // document's x5chain instead (which this ML-DSA fixture lacks), so skip there.
+        assumeTrue(zkSystem() == ZkSystemKind.ML_DSA)
         val statement = ZkPublicStatement.forProver(pidSpec(), fixtureDocument(), transcript, timestamp)
 
         // In-memory re-sign proves under the demo ML-DSA issuer, so the statement pins its hash

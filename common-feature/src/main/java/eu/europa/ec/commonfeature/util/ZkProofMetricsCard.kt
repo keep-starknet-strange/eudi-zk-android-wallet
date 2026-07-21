@@ -54,11 +54,12 @@ fun zkProofMetricsCard(): ExpandableListItemUi.NestedListItem? {
             mainContentData = ListItemMainContentDataUi.Text(text = "ZK proof metrics"),
             trailingContentData = ListItemTrailingContentDataUi.Icon(iconData = AppIcons.KeyboardArrowDown),
         ),
-        nestedItems = listOf(
-            row("zk_metric_reissue", "Re-sign & re-issue", "${metrics.reissueMs} ms"),
-            row("zk_metric_prove", "Proof generation", proveValue),
-            row("zk_metric_size", "Proof size", sizeValue),
-        ),
+        nestedItems = buildList {
+            // Only the ML-DSA flow re-signs/re-issues in memory; P-256 has no such step.
+            metrics.reissueMs?.let { add(row("zk_metric_reissue", "Re-sign & re-issue", "$it ms")) }
+            add(row("zk_metric_prove", "Proof generation", proveValue))
+            add(row("zk_metric_size", "Proof size", sizeValue))
+        },
         isExpanded = false,
     )
 }
