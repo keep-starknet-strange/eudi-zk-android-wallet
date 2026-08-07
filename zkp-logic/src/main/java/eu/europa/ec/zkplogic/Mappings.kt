@@ -16,16 +16,21 @@
 
 package eu.europa.ec.zkplogic
 
+import com.kss.euid.zk.sdk.IdentityStatement
 import com.kss.euid.zk.sdk.IssuerKey
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
+import com.kss.euid.zk.sdk.ProductPublicStatementV1
 import com.kss.euid.zk.sdk.ZkPublicStatement
 import com.kss.euid.zk.sdk.ZkSystemKind
 import com.kss.euid.zk.sdk.demoIssuerPublicKey
+import com.kss.euid.zk.sdk.demoRevocationEpoch
+import com.kss.euid.zk.sdk.demoRevocationPublicKey
 import com.kss.euid.zk.sdk.predicateModeFromToken
 import com.kss.euid.zk.sdk.predicateModeUsesAge
 import com.kss.euid.zk.sdk.predicateModeUsesNat
 import com.kss.euid.zk.sdk.resultAgeOver
+import com.kss.euid.zk.sdk.ts13DemoCircuitHash
 import com.kss.euid.zk.sdk.zkSystem
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
@@ -68,18 +73,27 @@ fun ZkPublicStatement.Companion.forProver(
         }
     }
 
-    return ZkPublicStatement(
-        specId = spec.id,
-        version = (spec.getParam<Long>(ZK_CONTRACT.paramVersion) ?: 1L).toUInt(),
-        doctype = ZK_CONTRACT.doctypePid,
-        namespace = ZK_CONTRACT.pidNamespace,
-        issuerKey = issuerKey,
-        todayEpochDay = timestamp.epochDay(), // TODO maybe not use system clock
-        nonce = Cbor.encode(sessionTranscript),
-        predicateMode = mode,
-        ageThresholdYears = if (predicateModeUsesAge(mode)) minAge?.toUInt() else null,
-        acceptedNumericCountries = if (predicateModeUsesNat(mode)) accepted else null,
-        natMode = NatMode.ANY, // only "any" supported this iteration
+    // ponytail: Ts13DemoV1 path — a single equality proof of the verifier-requested age-over element.
+    // The threshold flows from the request (min_age on the matched spec), NOT hardcoded. NOTE: the
+    // circuit on this branch is fixed to age_over_18 (MdocPidRequest carries no threshold), so only a
+    // min_age of 18 actually verifies until the circuit is parameterized. ML-DSA-only (issuerKey above
+    // is unused here). Flip back to ProductV1(ProductPublicStatementV1(...)) for the flat P-256 SDK.
+    return ZkPublicStatement.Ts13DemoV1(
+        IdentityStatement(
+            circuitHash = ts13DemoCircuitHash(),
+            zkSystemId = spec.id,
+            documentType = ZK_CONTRACT.doctypePid,
+            namespace = ZK_CONTRACT.pidNamespace,
+            elementIdentifier = resultAgeOver(
+                requireNotNull(minAge) { "ZK age-over proof requires a min_age param" }.toUInt()
+            ),
+            expectedValueCbor = byteArrayOf(0xF5.toByte()), // CBOR true
+            timestampEpochSeconds = timestamp.epochSeconds,
+            sessionTranscript = Cbor.encode(sessionTranscript),
+            trustedIssuerPublicKey = demoIssuerPublicKey(),
+            revocationPublicKey = demoRevocationPublicKey(),
+            revocationEpoch = demoRevocationEpoch(),
+        ),
     )
 }
 

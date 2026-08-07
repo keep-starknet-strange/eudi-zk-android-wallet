@@ -74,7 +74,7 @@ internal class WalletCoreConfigImpl(
                     // higher throughput for large (ZK proof) responses. Readers without Wi-Fi
                     // Aware hardware fall back to BLE automatically.
                     configureProximityPresentation(
-                        enableWifiAware = true,
+                        enableWifiAware = false,
                     )
 
                     configureReaderTrustStore(

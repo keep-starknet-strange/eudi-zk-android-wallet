@@ -19,6 +19,7 @@ package eu.europa.ec.zkplogic
 import com.kss.euid.zk.sdk.IssuerKey
 import com.kss.euid.zk.sdk.NatMode
 import com.kss.euid.zk.sdk.PredicateMode
+import com.kss.euid.zk.sdk.ProductPublicStatementV1
 import com.kss.euid.zk.sdk.ZkPublicStatement
 import com.kss.euid.zk.sdk.isoAlpha2ToNumeric
 import com.kss.euid.zk.sdk.predicateModeFromToken
@@ -39,18 +40,20 @@ import org.junit.Test
  */
 class SdkContractTest {
 
-    private fun sampleStatement(ageThreshold: UInt? = 18u) = ZkPublicStatement(
-        specId = "stwo-euid-pid-v1",
-        version = 1u,
-        doctype = "eu.europa.ec.eudi.pid.1",
-        namespace = "eu.europa.ec.eudi.pid.1",
-        issuerKey = IssuerKey.MlDsa(ByteArray(32) { 0x11 }), // SHA-256 of the trusted issuer pkEncode
-        todayEpochDay = 7305,
-        nonce = byteArrayOf(0xA, 0xB, 0xC),
-        predicateMode = PredicateMode.AND,
-        ageThresholdYears = ageThreshold,
-        acceptedNumericCountries = listOf(56u, 196u, 300u),
-        natMode = NatMode.ANY,
+    private fun sampleStatement(ageThreshold: UInt? = 18u) = ZkPublicStatement.ProductV1(
+        ProductPublicStatementV1(
+            specId = "stwo-euid-pid-v1",
+            version = 1u,
+            doctype = "eu.europa.ec.eudi.pid.1",
+            namespace = "eu.europa.ec.eudi.pid.1",
+            issuerKey = IssuerKey.MlDsa(ByteArray(32) { 0x11 }), // SHA-256 of the trusted issuer pkEncode
+            todayEpochDay = 7305,
+            nonce = byteArrayOf(0xA, 0xB, 0xC),
+            predicateMode = PredicateMode.AND,
+            ageThresholdYears = ageThreshold,
+            acceptedNumericCountries = listOf(56u, 196u, 300u),
+            natMode = NatMode.ANY,
+        ),
     )
 
     @Test

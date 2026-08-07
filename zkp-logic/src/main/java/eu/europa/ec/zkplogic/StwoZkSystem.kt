@@ -16,6 +16,8 @@
 
 package eu.europa.ec.zkplogic
 
+import com.kss.euid.zk.sdk.IdentityWitness
+import com.kss.euid.zk.sdk.ProductMdocWitnessV1
 import com.kss.euid.zk.sdk.TrustedIssuers
 import com.kss.euid.zk.sdk.ZkMdocWitness
 import com.kss.euid.zk.sdk.ZkPublicStatement
@@ -24,6 +26,7 @@ import com.kss.euid.zk.sdk.demoBuildMlDsaWitness
 import com.kss.euid.zk.sdk.demoDeviceAuthSigStructure
 import com.kss.euid.zk.sdk.demoIssuerPublicKey
 import com.kss.euid.zk.sdk.demoMintMlDsaSignedPidMdoc
+import com.kss.euid.zk.sdk.demoRevocationWitness
 import com.kss.euid.zk.sdk.proveIdentity
 import com.kss.euid.zk.sdk.verifyIdentity
 import com.kss.euid.zk.sdk.zkContractV1
@@ -87,7 +90,8 @@ class StwoZkSystem : ZkSystem {
         document: MdocDocument, // P256 compatible
         sessionTranscript: DataItem,
         timestamp: Instant,
-    ): ZkDocument {
+    ): ZkDocument = try {
+        android.util.Log.i("StwoZkSystem", "generateProof entered: zkSystem=${zkSystem()} spec=${zkSystemSpec.id}")
         // Build the prover witness for the linked ZK system. ML-DSA re-signs the presented P-256
         // PID in-memory (demo issuer + real device key); P-256 uses the document as-is with its
         // x5chain as the trust anchor.
@@ -117,10 +121,25 @@ class StwoZkSystem : ZkSystem {
             sessionTranscript = sessionTranscript,
             timestamp = timestamp
         )
-        val witness = ZkMdocWitness(
-            document = witnessDoc,
-            trustedIssuers = trustedIssuers,
+        // ponytail: Ts13DemoV1 path — non-revocation witness minted by the demo revocation authority
+        // (id derived from the minted MSO). Flip back to ProductV1(ProductMdocWitnessV1(...)) + the
+        // `trustedIssuers` above forFwifi the flat P-256 SDK.
+        val rev = demoRevocationWitness(witnessDoc)
+        val witness = ZkMdocWitness.Ts13DemoV1(
+            IdentityWitness(
+                document = witnessDoc,
+                revocationIdLo = rev.idLo,
+                revocationIdHi = rev.idHi,
+                revocationSignature = rev.signature,
+            ),
         )
+
+        // ponytail: temporary diagnostics — dump the witness mdoc (base64, chunked) so we can replay
+        // the prover's extract_pid_mdoc offline and see the exact MdocError (ElementMissing / digest /
+        // deviceAuth). Remove once the InvalidPrivateCredential cause is fixed.
+        android.util.Base64.encodeToString(witnessDoc, android.util.Base64.NO_WRAP)
+            .chunked(3000)
+            .forEachIndexed { i, c -> android.util.Log.i("StwoZkWitness", "wd[$i]=$c") }
 
         lateinit var proof: ByteArray
         val proveMs = measureTimeMillis { proof = proveIdentity(statement, witness) }
@@ -129,7 +148,10 @@ class StwoZkSystem : ZkSystem {
             ZkProofMetrics.Snapshot(reissueMs = reissueMs, proveMs = proveMs, proofSizeBytes = proof.size)
         )
 
-        return ZkDocument.from(zkSystemSpec, document, proof, timestamp)
+        ZkDocument.from(zkSystemSpec, document, proof, timestamp)
+    } catch (t: Throwable) {
+        android.util.Log.e("StwoZkSystem", "generateProof failed", t)
+        throw t
     }
 
     override fun verifyProof(
