@@ -85,7 +85,8 @@ object RequestTransformer {
                         domainDocFormat = DomainDocumentFormat.getFormat(
                             format = storageDocument.format,
                         ),
-                        docClaimsDomain = domainClaims
+                        docClaimsDomain = domainClaims,
+                        isZeroKnowledge = requestDocument.isZeroKnowledgeRequest,
                     )
                 )
             }

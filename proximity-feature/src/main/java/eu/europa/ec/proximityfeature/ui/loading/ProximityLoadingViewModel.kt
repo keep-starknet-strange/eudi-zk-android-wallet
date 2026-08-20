@@ -35,8 +35,10 @@ import eu.europa.ec.uilogic.navigation.ProximityScreens
 import eu.europa.ec.uilogic.navigation.Screen
 import eu.europa.ec.uilogic.navigation.helper.generateComposableArguments
 import eu.europa.ec.uilogic.navigation.helper.generateComposableNavigationLink
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.core.annotation.InjectedParam
 import org.koin.core.annotation.KoinViewModel
 import kotlin.time.Duration
@@ -79,6 +81,16 @@ class ProximityLoadingViewModel(
         viewModelScope.launch {
 
             interactor.setScopeId(presentationScopeId)
+
+            if (interactor.isZeroKnowledgeRequest()) {
+                setState {
+                    copy(
+                        headerConfig = headerConfig.copy(
+                            description = resourceProvider.getString(R.string.loading_header_description_zkp)
+                        )
+                    )
+                }
+            }
 
             interactor.observeResponse().collect {
                 when (it) {
@@ -125,9 +137,9 @@ class ProximityLoadingViewModel(
         }
     }
 
-    private fun sendRequestedDocuments(event: Event) {
-
-        when (val result = interactor.sendRequestedDocuments()) {
+    private suspend fun sendRequestedDocuments(event: Event) {
+        val result = withContext(Dispatchers.IO) { interactor.sendRequestedDocuments() }
+        when (result) {
             is ProximityLoadingSendRequestedDocumentPartialState.Success -> { /*no op*/
             }
 

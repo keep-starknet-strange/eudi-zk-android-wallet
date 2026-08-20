@@ -38,6 +38,7 @@ dependencies {
     implementation(project(LibraryModule.StorageLogic.path))
     implementation(project(LibraryModule.AuthenticationLogic.path))
     implementation(project(LibraryModule.NetworkLogic.path))
+    implementation(project(LibraryModule.ZkpLogic.path))
 
     implementation(libs.androidx.biometric)
 

@@ -185,6 +185,12 @@ interface WalletCorePresentationController {
     fun sendRequestedDocuments(): SendRequestedDocumentsPartialState
 
     /**
+     * Whether the current (already received) request asks for any document via a zero-knowledge
+     * predicate, so the UI can reflect that a ZK proof is being generated while the response is built.
+     */
+    fun isZeroKnowledgeRequest(): Boolean
+
+    /**
      * Updates the UI model
      * @param disclosedDocuments User updated data through UI Events
      * */
@@ -424,6 +430,9 @@ class WalletCorePresentationControllerImpl(
             error = genericErrorMessage
         )
     }
+
+    override fun isZeroKnowledgeRequest(): Boolean =
+        processedRequest?.requestedDocuments?.any { it.isZeroKnowledgeRequest } == true
 
     override fun mappedCallbackStateFlow(): Flow<ResponseReceivedPartialState> {
         return events.mapNotNull { response ->

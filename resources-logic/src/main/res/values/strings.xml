@@ -175,6 +175,7 @@
     <string name="request_relying_party_default_name">@string/generic_default_relying_party_name</string>
     <string name="request_relying_party_description">requests the following</string>
     <string name="request_warning_text">Please review carefully before sharing your data.</string>
+    <string name="request_zkp_disclaimer">The following will not be disclosed but verified with zero-knowledge.</string>
     <string name="request_collapsed_supporting_text">@string/generic_view_details</string>
     <string name="request_no_data">The requested document is not available in your EUDI Wallet.
         Please contact the authorised issuer for further information.</string>
@@ -189,6 +190,7 @@
 
     <!-- region Loading Screen -->
     <string name="loading_header_description">Please wait…</string>
+    <string name="loading_header_description_zkp">Generating zero-knowledge proof…</string>
     <string name="loading_biometry_biometrics_enabled_description">Use your biometrics to approve the transaction.</string>
     <string name="loading_biometry_biometrics_not_enabled_description">To approve the transaction you need to verify your identity.</string>
     <!--endregion-->

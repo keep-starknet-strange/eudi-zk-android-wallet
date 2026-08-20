@@ -33,6 +33,8 @@ moduleConfig {
 }
 
 dependencies {
+    // ZK proof metrics card shared by the proximity & remote presentation success screens.
+    implementation(project(LibraryModule.ZkpLogic.path))
     implementation(libs.gson)
     implementation(libs.zxing)
     implementation(libs.androidx.camera.core)

@@ -19,6 +19,7 @@ package eu.europa.ec.corelogic.config
 import android.content.Context
 import eu.europa.ec.corelogic.BuildConfig
 import eu.europa.ec.corelogic.model.DocumentIdentifier
+import eu.europa.ec.eudi.iso18013.transfer.zkp.ZkResponsePolicy
 import eu.europa.ec.eudi.wallet.EudiWalletConfig
 import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings.CredentialPolicy
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
@@ -26,6 +27,7 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.ClientIdScheme
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.Format
 import eu.europa.ec.resourceslogic.R
+import eu.europa.ec.zkplogic.StwoZkSystemRepository
 import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -68,6 +70,13 @@ internal class WalletCoreConfigImpl(
                         withEnabled(true)
                     }
 
+                    // Advertise Wi-Fi Aware alongside BLE for proximity presentation. It gives
+                    // higher throughput for large (ZK proof) responses. Readers without Wi-Fi
+                    // Aware hardware fall back to BLE automatically.
+                    configureProximityPresentation(
+                        enableWifiAware = false,
+                    )
+
                     configureReaderTrustStore(
                         context,
                         R.raw.pidissuerca02_cz,
@@ -80,6 +89,14 @@ internal class WalletCoreConfigImpl(
                         R.raw.dc4eu,
                         R.raw.r45_staging,
                         R.raw.multipaz,
+                    )
+
+                    // Enable the STWO ZK system (predicate proofs). Strict policy: if a proof cannot
+                    // be produced for a ZK request, the response fails rather than silently
+                    // disclosing the underlying value in plaintext.
+                    configureZkp(
+                        zkSystemRepository = StwoZkSystemRepository(context).build(),
+                        zkResponsePolicy = ZkResponsePolicy.Strict,
                     )
                 }
             }
